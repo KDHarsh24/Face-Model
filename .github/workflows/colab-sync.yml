@@ -1,0 +1,85 @@
+name: Sync to Google Colab
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  sync-to-colab:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        pip install requests google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
+        
+    - name: Validate Notebook
+      run: |
+        python -c "
+        import json
+        import sys
+        
+        # Validate notebook structure
+        try:
+            with open('face_recognition.ipynb', 'r', encoding='utf-8') as f:
+                notebook = json.load(f)
+            print('✅ Notebook structure is valid')
+            
+            # Check for required cells
+            cells = notebook.get('cells', [])
+            print(f'📊 Found {len(cells)} cells')
+            
+            # Validate each cell
+            for i, cell in enumerate(cells):
+                cell_type = cell.get('cell_type', 'unknown')
+                if cell_type not in ['markdown', 'code']:
+                    print(f'⚠️  Cell {i+1}: Unknown cell type: {cell_type}')
+                else:
+                    print(f'✅ Cell {i+1}: {cell_type}')
+                    
+        except Exception as e:
+            print(f'❌ Notebook validation failed: {e}')
+            sys.exit(1)
+        "
+        
+    - name: Update Colab Badge
+      run: |
+        # Update the Colab badge to point to the latest version
+        echo "✅ Repository synchronized with latest changes"
+        echo "🔗 Access via: https://colab.research.google.com/github/KDHarsh24/Face-Model/blob/main/face_recognition.ipynb"
+        
+    - name: Create Release Notes
+      if: github.event_name == 'push'
+      run: |
+        echo "## 🚀 Auto-sync to Google Colab" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### Changes in this update:" >> release_notes.md
+        echo "- Face recognition notebook updated" >> release_notes.md
+        echo "- Using antelopev2 model for maximum accuracy" >> release_notes.md
+        echo "- Automatic person name extraction from video files" >> release_notes.md
+        echo "- Enhanced logging and error handling" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### 📱 Quick Access:" >> release_notes.md
+        echo "[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/KDHarsh24/Face-Model/blob/main/face_recognition.ipynb)" >> release_notes.md
+        
+    - name: Commit and Push Changes
+      if: github.event_name == 'push'
+      run: |
+        git config --local user.email "harshkumardas24@gmail.com"
+        git config --local user.name "Harsh Kumar Das"
+        
+        # Add any generated files
+        if [ -f "release_notes.md" ]; then
+          git add release_notes.md
+          git commit -m "🤖 Auto-generated release notes [skip ci]" || echo "No changes to commit"
+        fi

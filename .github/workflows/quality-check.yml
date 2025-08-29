@@ -1,0 +1,133 @@
+name: Notebook Quality Check
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install notebook tools
+      run: |
+        pip install nbformat nbconvert jupyter
+        
+    - name: Check notebook syntax
+      run: |
+        python -c "
+        import nbformat
+        import sys
+        
+        try:
+            # Read and validate notebook
+            with open('face_recognition.ipynb', 'r') as f:
+                nb = nbformat.read(f, as_version=4)
+            
+            print('✅ Notebook format is valid')
+            
+            # Count cells by type
+            code_cells = sum(1 for cell in nb.cells if cell.cell_type == 'code')
+            markdown_cells = sum(1 for cell in nb.cells if cell.cell_type == 'markdown')
+            
+            print(f'📊 Statistics:')
+            print(f'   📝 Code cells: {code_cells}')
+            print(f'   📚 Markdown cells: {markdown_cells}')
+            print(f'   📋 Total cells: {len(nb.cells)}')
+            
+            # Check for potential issues
+            issues = []
+            
+            for i, cell in enumerate(nb.cells):
+                if cell.cell_type == 'code':
+                    source = ''.join(cell.source)
+                    
+                    # Check for common issues
+                    if 'input(' in source and 'strip()' not in source:
+                        issues.append(f'Cell {i+1}: input() without strip() - may cause issues')
+                    
+                    if 'cv2.VideoCapture(' in source and 'cap.release()' not in source:
+                        # Check if release is in the same cell or nearby cells
+                        found_release = False
+                        for j in range(max(0, i-2), min(len(nb.cells), i+3)):
+                            if 'cap.release()' in ''.join(nb.cells[j].source):
+                                found_release = True
+                                break
+                        if not found_release:
+                            issues.append(f'Cell {i+1}: VideoCapture without release() - memory leak risk')
+            
+            if issues:
+                print('⚠️  Potential issues found:')
+                for issue in issues:
+                    print(f'   - {issue}')
+            else:
+                print('✅ No issues detected')
+                
+        except Exception as e:
+            print(f'❌ Error checking notebook: {e}')
+            sys.exit(1)
+        "
+        
+    - name: Check for required dependencies
+      run: |
+        python -c "
+        import json
+        
+        # Check if all required packages are in the install cell
+        required_packages = [
+            'insightface', 'opencv-python-headless', 'numpy', 
+            'onnxruntime-gpu', 'scipy', 'scikit-learn', 
+            'albumentations', 'tqdm'
+        ]
+        
+        with open('face_recognition.ipynb', 'r') as f:
+            notebook = json.load(f)
+        
+        install_cells = []
+        for cell in notebook.get('cells', []):
+            if cell.get('cell_type') == 'code':
+                source = ''.join(cell.get('source', []))
+                if 'pip install' in source:
+                    install_cells.append(source)
+        
+        if install_cells:
+            install_text = ' '.join(install_cells)
+            missing_packages = [pkg for pkg in required_packages if pkg not in install_text]
+            
+            if missing_packages:
+                print('⚠️  Missing packages in install cell:')
+                for pkg in missing_packages:
+                    print(f'   - {pkg}')
+            else:
+                print('✅ All required packages are included')
+        else:
+            print('❌ No pip install cell found!')
+        "
+        
+    - name: Generate notebook preview
+      run: |
+        echo '# 🔬 Face Recognition Notebook' > NOTEBOOK_INFO.md
+        echo '' >> NOTEBOOK_INFO.md
+        echo '## 📋 Quick Info' >> NOTEBOOK_INFO.md
+        echo '- **Model**: antelopev2 (highest accuracy)' >> NOTEBOOK_INFO.md
+        echo '- **GPU Support**: CUDA recommended' >> NOTEBOOK_INFO.md
+        echo '- **Input Format**: Video_<name>.mp4' >> NOTEBOOK_INFO.md
+        echo '- **Output**: Face database with embeddings' >> NOTEBOOK_INFO.md
+        echo '' >> NOTEBOOK_INFO.md
+        echo '## 🚀 Quick Start' >> NOTEBOOK_INFO.md
+        echo '1. Click the Colab badge to open' >> NOTEBOOK_INFO.md
+        echo '2. Run all cells in sequence' >> NOTEBOOK_INFO.md
+        echo '3. Upload your video files' >> NOTEBOOK_INFO.md
+        echo '4. Test with your images' >> NOTEBOOK_INFO.md
+        echo '' >> NOTEBOOK_INFO.md
+        echo '[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/KDHarsh24/Face-Model/blob/main/face_recognition.ipynb)' >> NOTEBOOK_INFO.md
